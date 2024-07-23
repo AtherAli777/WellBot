@@ -70,7 +70,7 @@ if "messages" not in st.session_state:
 
 # Main chat functionality
 if api_key:
-    os.environ['OPENAI_API_KEY'] = api_key
+    os.environ['OPENAI_API_KEY'] = api_keyst.secrets["OPENAI_API_KEY"]
     llm = ChatOpenAI(model_name=model, temperature=0.3)
 
     if 'vectorstore' not in st.session_state:
