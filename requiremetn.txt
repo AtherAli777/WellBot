@@ -1,0 +1,9 @@
+streamlit
+langchain-openai
+faiss-cpu
+sentence-transformers
+huggingface-hub
+nltk
+scikit-learn
+streamlit-chat
+python-dotenv
