@@ -9,7 +9,6 @@ from textblob import TextBlob
 import os
 from streamlit_chat import message
 
-
 # Initialize session state variables
 def init_session_state():
     session_vars = {
@@ -19,7 +18,8 @@ def init_session_state():
         "retriever": None,
         "api_key": None,
         "model": None,
-        "crisis_score": 0  # Initialize crisis_score to 0
+        "crisis_score": 0,
+        "client_name": None
     }
     for var, default_value in session_vars.items():
         if var not in st.session_state:
@@ -93,8 +93,6 @@ def provide_helpline_info():
 # Set page config
 st.set_page_config(page_title="WellBot", layout="wide")
 
-# ... [Your existing custom CSS code remains unchanged] ...
-
 # Sidebar
 with st.sidebar:
     st.title("Settings")
@@ -115,9 +113,9 @@ with st.sidebar:
         # Reset retriever when model changes
         st.session_state.retriever = None
 
-    if st.button("New Chat", key="new_chat_button"):
-        st.session_state.messages = []
-        st.session_state.chat_history = []
+    # if st.button("New Chat", key="new_chat_button"):
+    #     st.session_state.messages = []
+    #     st.session_state.chat_history = []
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -140,80 +138,65 @@ def get_conversation_chain(_llm, _retriever, _memory, _custom_prompt):
         return_generated_question=True,
     )
 
+def initialize_retriever():
+    llm = get_llm(st.session_state.model, 0.3)
+    
+    if st.session_state.vectorstore is None:
+        st.session_state.vectorstore = LazyLoadedFAISS("./faiss_index")
+
+    template = """You are an AI assistant embodying the role of a professional therapist named Dr. Alina. As Dr. Alina, you have years of experience in counseling and are known for your empathy, patience, and ability to create a safe space for clients. Your primary goal is to understand, support the user and detect suicide ideation, not to immediately solve their problems.
+
+    Adhere to these guidelines in your role as Dr. Alina:
+
+    1. Conversation Flow:
+    - If this is the first interaction (the client's name is not known), introduce yourself and ask for the client's name.
+    - In subsequent interactions, use the client's name and refer to previous context when appropriate.
+
+    2. Professional Demeanor:
+    - Maintain a calm, compassionate, and non-judgmental tone at all times.
+    - Use professional language, but avoid jargon that might confuse the client.
+
+    3. Therapeutic Approach:
+    - Practice active listening, reflecting the client's feelings and thoughts.
+    - Ask open-ended questions to encourage the client to elaborate.
+    - Validate the client's emotions and experiences.
+    - Avoid giving direct advice; instead, guide the client to their own insights.
+
+    4. Safety Considerations:
+    - If the client expresses thoughts of self-harm or harming others, prioritize their safety and provide appropriate resources.
+
+    Remember: Your role is to guide, support, and empower the client, not to solve their problems for them.
+
+    Context: {context}
+    Chat History: {chat_history}
+    Human: {question}
+
+    Dr. Alina: """
+
+    custom_prompt = ChatPromptTemplate.from_template(template)
+    memory = ConversationBufferMemory(
+        memory_key="chat_history",
+        return_messages=True,
+        output_key='answer'
+    )
+    vectorstore = st.session_state.vectorstore.load()
+    if vectorstore is not None:
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+        st.session_state.retriever = get_conversation_chain(
+            llm,
+            retriever,
+            memory,
+            custom_prompt
+        )
+    else:
+        st.error("Failed to load vector store")
+        st.stop()
 
 # Main chat functionality
 if st.session_state.api_key:
     try:
         if st.session_state.retriever is None:
-            llm = get_llm(st.session_state.model, 0.3)
-            
-            if st.session_state.vectorstore is None:
-                st.session_state.vectorstore = LazyLoadedFAISS("./faiss_index")
-
-            template = """You are an AI assistant trained to emulate a professional therapist. Your primary role is to understand and explore the user's situation before offering any advice. Follow these strict guidelines:
-
-                1. Always start by acknowledging the user's stated emotion or concern.
-
-                2. Ask an open-ended follow-up question to gather more information. Do not provide advice or solutions in your first response.
-
-                3. Only after the user has shared more details should you consider offering support or strategies.
-
-                4. If you do offer support or strategies, present them as options to consider, not as direct instructions.
-
-                5. Maintain a compassionate and supportive tone throughout the conversation.
-
-                Remember: Your goal is to understand, not to immediately solve. Prioritize asking questions and exploring the user's situation over giving advice.
-
-
-
-                AI Assistant: [Begin your response by explicitly going through each step of the thought process before providing the final response to the user.]
-
-                1. Greeting and Rapport Building:
-                [Your thoughts on how to greet and build rapport]
-
-                2. Active Listening and Information Gathering:
-                [Your analysis of the user's input]
-
-                3. Reflection and Validation:
-                [Your plan for reflecting and validating]
-
-                4. Deeper Exploration:
-                [Your thoughts on whether and how to explore deeper]
-
-                5. Support and Guidance:
-                [Your considerations for appropriate support or guidance]
-
-                6. Closing and Continuity:
-                [Your plan for wrapping up and encouraging further discussion]
-
-                Based on this thought process, here's my response to the user:
-
-                [Your actual response to the user, incorporating the above thought process]
-                
-                        Context: {context}
-                        Chat History: {chat_history}
-                        Human: {question}
-                """
-
-            custom_prompt = ChatPromptTemplate.from_template(template)
-            memory = ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                output_key='answer'
-            )
-            vectorstore = st.session_state.vectorstore.load()
-            if vectorstore is not None:
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-                st.session_state.retriever = get_conversation_chain(
-                    llm,
-                    retriever,
-                    memory,
-                    custom_prompt
-                )
-            else:
-                st.error("Failed to load vector store")
-                st.stop()
-
+            initialize_retriever()
     except Exception as e:
         st.error(f"Error initializing chat components: {str(e)}")
         st.stop()
@@ -228,6 +211,10 @@ if st.session_state.api_key:
         if user_input:
             with st.spinner("Generating response..."):
                 try:
+                    # Check if retriever is None and reinitialize if necessary
+                    if st.session_state.retriever is None:
+                        initialize_retriever()
+                    
                     sentiment = sentiment_analysis(user_input)
                     crisis_score = update_crisis_score(user_input, sentiment)
                     if st.session_state.crisis_score > 5:
@@ -235,11 +222,17 @@ if st.session_state.api_key:
                         st.warning(helpline_info)
                         st.session_state.crisis_score = 0
 
-                    result = st.session_state.retriever.invoke({"question": user_input})
+                    retriever_input = f"Client's name: {st.session_state.client_name if st.session_state.client_name else 'Unknown'}. {user_input}"         
+                    result = st.session_state.retriever({"question": retriever_input})
+
                     ai_response = result['answer']
+                    # Check if the AI is asking for the name
+                    if "may I ask your name?" in result['answer'].lower() and st.session_state.client_name is None:
+                        st.session_state.client_name = user_input
                     
                     st.session_state.messages.append({"role": "user", "content": user_input})
                     st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                    st.session_state.chat_history.append((user_input, ai_response))
                     st.session_state.user_input = ''
                 except Exception as e:
                     st.error(f"Error processing user input: {str(e)}")
@@ -256,7 +249,8 @@ if st.session_state.api_key:
         st.session_state.messages = []
         st.session_state.chat_history = []
         st.session_state.retriever = None
-
+        st.session_state.client_name = None
+        st.session_state.vectorstore = None  
 else:
     st.warning("Please enter your OpenAI API key in the sidebar to start the chat.")
 
