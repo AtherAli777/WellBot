@@ -9,3 +9,4 @@ nltk
 scikit-learn
 streamlit-chat
 python-dotenv
+textblob
