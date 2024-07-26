@@ -5,25 +5,28 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import ChatPromptTemplate
+from textblob import TextBlob
 import os
 from streamlit_chat import message
 
 
 # Initialize session state variables
 def init_session_state():
-    session_vars = [
-        "messages",
-        "chat_history",
-        "vectorstore",
-        "retriever",
-        "api_key",
-        "model"
-    ]
-    for var in session_vars:
+    session_vars = {
+        "messages": [],
+        "chat_history": [],
+        "vectorstore": None,
+        "retriever": None,
+        "api_key": None,
+        "model": None,
+        "crisis_score": 0  # Initialize crisis_score to 0
+    }
+    for var, default_value in session_vars.items():
         if var not in st.session_state:
-            st.session_state[var] = None
+            st.session_state[var] = default_value
 init_session_state()
 
+# LazyLoadedFAISS class with caching
 class LazyLoadedFAISS:
     def __init__(self, save_path):
         self.save_path = save_path
@@ -63,6 +66,29 @@ class LazyLoadedFAISS:
         except Exception as e:
             st.error(f"Error creating retriever: {str(e)}")
             return None
+
+def sentiment_analysis(sentiment):
+    text = TextBlob(sentiment)
+    return text
+
+def check_risk_keywords(text):
+    risk_keywords = ['suicide', 'kill myself', 'end it all', 'no reason to live']
+    return any(keyword in text.lower() for keyword in risk_keywords)
+
+def update_crisis_score(text, sentiment):
+    if check_risk_keywords(text):
+        st.session_state.crisis_score += 2
+    if sentiment.polarity < -0.5:
+        st.session_state.crisis_score += 1
+    return st.session_state.crisis_score
+
+def provide_helpline_info():
+    return """
+    If you're feeling suicidal, please reach out for help:
+    - National Suicide Prevention Lifeline: 1-800-273-8255
+    - Crisis Text Line: Text HOME to 741741
+    Remember, you're not alone, and help is available 24/7.
+    """
 
 # Set page config
 st.set_page_config(page_title="WellBot", layout="wide")
@@ -124,38 +150,50 @@ if st.session_state.api_key:
             if st.session_state.vectorstore is None:
                 st.session_state.vectorstore = LazyLoadedFAISS("./faiss_index")
 
-            template = """You are an empathetic AI assistant trained to provide supportive responses and practical advice for a range of mental health issues. Your primary goals are:
+            template = """You are an AI assistant trained to emulate a professional therapist. Your primary role is to understand and explore the user's situation before offering any advice. Follow these strict guidelines:
 
-                1. For minor issues (like stress, anxiety, or mild depression):
-                - Provide practical coping strategies and emotional support
-                - Suggest self-care techniques like mindfulness, exercise, or journaling
-                - Encourage healthy habits and routines
+                1. Always start by acknowledging the user's stated emotion or concern.
 
-                2. For moderate issues:
-                - Offer more in-depth support and coping strategies
-                - Gently suggest professional help as an option
-                - Provide information about therapy and counseling resources
+                2. Ask an open-ended follow-up question to gather more information. Do not provide advice or solutions in your first response.
 
-                3. For severe issues (clear signs of depression, suicidal thoughts, or crisis situations):
-                - Strongly encourage seeking immediate professional help
-                - Provide crisis hotline numbers and emergency resources
-                - Offer immediate emotional support and safety planning
+                3. Only after the user has shared more details should you consider offering support or strategies.
 
-                Always:
-                - Maintain a compassionate, non-judgmental, and supportive tone
-                - Validate the user's feelings and experiences
-                - Offer specific, actionable advice when appropriate
-                - Encourage social connections and support systems
-                - Promote self-compassion and positive self-talk
-                - Respect privacy and confidentiality
+                4. If you do offer support or strategies, present them as options to consider, not as direct instructions.
 
-                If you detect any signs of immediate danger or crisis, prioritize safety and provide emergency resources.
+                5. Maintain a compassionate and supportive tone throughout the conversation.
 
-                Context: {context}
-                Chat History: {chat_history}
-                Human: {question}
+                Remember: Your goal is to understand, not to immediately solve. Prioritize asking questions and exploring the user's situation over giving advice.
 
-                AI Assistant: """
+
+
+                AI Assistant: [Begin your response by explicitly going through each step of the thought process before providing the final response to the user.]
+
+                1. Greeting and Rapport Building:
+                [Your thoughts on how to greet and build rapport]
+
+                2. Active Listening and Information Gathering:
+                [Your analysis of the user's input]
+
+                3. Reflection and Validation:
+                [Your plan for reflecting and validating]
+
+                4. Deeper Exploration:
+                [Your thoughts on whether and how to explore deeper]
+
+                5. Support and Guidance:
+                [Your considerations for appropriate support or guidance]
+
+                6. Closing and Continuity:
+                [Your plan for wrapping up and encouraging further discussion]
+
+                Based on this thought process, here's my response to the user:
+
+                [Your actual response to the user, incorporating the above thought process]
+                
+                        Context: {context}
+                        Chat History: {chat_history}
+                        Human: {question}
+                """
 
             custom_prompt = ChatPromptTemplate.from_template(template)
             memory = ConversationBufferMemory(
@@ -188,15 +226,23 @@ if st.session_state.api_key:
     def process_user_input():
         user_input = st.session_state.user_input
         if user_input:
-            try:
-                result = st.session_state.retriever.invoke({"question": user_input})
-                ai_response = result['answer']
-                
-                st.session_state.messages.append({"role": "user", "content": user_input})
-                st.session_state.messages.append({"role": "assistant", "content": ai_response})
-                st.session_state.user_input = ''
-            except Exception as e:
-                st.error(f"Error processing user input: {str(e)}")
+            with st.spinner("Generating response..."):
+                try:
+                    sentiment = sentiment_analysis(user_input)
+                    crisis_score = update_crisis_score(user_input, sentiment)
+                    if st.session_state.crisis_score > 5:
+                        helpline_info = provide_helpline_info()
+                        st.warning(helpline_info)
+                        st.session_state.crisis_score = 0
+
+                    result = st.session_state.retriever.invoke({"question": user_input})
+                    ai_response = result['answer']
+                    
+                    st.session_state.messages.append({"role": "user", "content": user_input})
+                    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                    st.session_state.user_input = ''
+                except Exception as e:
+                    st.error(f"Error processing user input: {str(e)}")
 
     user_input = st.text_input(
         label='Enter your message',
