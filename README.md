@@ -41,3 +41,36 @@ To set up this project, follow these steps:
 To run the chatbot:
 1. Set your OpenAI API key in the Streamlit sidebar.
 2. Run the Streamlit app: streamlit run ideation.py
+
+## API Key
+This project requires an OpenAI API key to function. Here's how to set it up:
+
+1. Obtain an API key from [OpenAI](https://openai.com/api/).
+2. In the Streamlit interface, you'll find an input field in the sidebar to enter your API key.
+3. Enter your API key in this field when you run the application.
+
+Important: Keep your API key confidential. Do not share it or commit it to version control.
+
+For local development, you can set the API key as an environment variable:
+
+## Deployment
+This project can be deployed on platforms that support Streamlit apps, such as Streamlit Sharing or Heroku. Ensure that you set up the necessary environment variables and have the FAISS index file in place.
+
+
+## Contributing
+Contributions to improve ideation.py are welcome. Please follow these steps:
+1. Fork the repository
+2. Create a new branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## Acknowledgements
+- OpenAI for the GPT model
+- Langchain for the RAG framework
+- Streamlit for the web interface
+- HuggingFace for the sentence transformers
+
+
+## Authors
+- Ather Ali - Initial work - https://github.com/AtherAli777
