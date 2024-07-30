@@ -13,7 +13,7 @@ https://wellbot.streamlit.app/
 - Streamlit-based user interface
 - Dynamic conversation flow with personalized responses
 
-- ## Dataset
+## Dataset
 This project uses a custom-created dataset, `health.csv`, which forms the knowledge base for our RAG-based chatbot.
 
 Dataset Description
