@@ -31,3 +31,13 @@ This dataset was carefully curated to cover a wide range of mental health topics
 
 Usage in the Project
 The `health.csv` file is used to create a FAISS index, which allows for efficient similarity search during the chatbot's operation. This enables the system to retrieve relevant information and generate contextually appropriate responses.
+
+## Installation
+To set up this project, follow these steps:
+1. Clone the repository: https://github.com/AtherAli777/WellBot.git
+2. Install the required dependencies: pip install -r requirements.txt
+
+## Usage
+To run the chatbot:
+1. Set your OpenAI API key in the Streamlit sidebar.
+2. Run the Streamlit app: streamlit run ideation.py
